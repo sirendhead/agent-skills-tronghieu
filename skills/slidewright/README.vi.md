@@ -33,7 +33,7 @@ Dùng SlideWright cho bài nói, phiên hội thảo, workshop, lớp học, dem
 ## Deck được hình thành như thế nào
 
 1. Chia sẻ kết quả mong muốn của bài nói và một thông điệp khán giả cần nhớ.
-2. Định hình narrative ngắn gọn cùng hướng hình ảnh theo khán giả và bối cảnh.
+2. Skill xác định loại deck (báo cáo cấp trên, đề xuất xin quyết định, chào bán, đào tạo, bài nói hay cập nhật nội bộ), rồi định hình narrative, giọng văn và hướng hình ảnh theo đúng khán giả và bối cảnh đó.
 3. Dựng mỗi slide quanh một ý, dùng chữ đủ lớn để đọc trong phòng và hình ảnh khi chúng làm rõ ý.
 4. Chỉ thêm chuyển động do người trình bày điều khiển: navigation, reveal từng bước hoặc so sánh phục vụ câu chuyện.
 5. Kiểm tra deck theo màn hình đích và chuẩn bị speaker note riêng; yêu cầu PDF khi cần một bản để chia sẻ.

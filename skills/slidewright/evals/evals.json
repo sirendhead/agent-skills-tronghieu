@@ -78,6 +78,23 @@
         "The response mentions the phone and laptop must share the same network",
         "Keeps the bottom navigation slider and slide counter; contains no form/input controls on slides"
       ]
+    },
+    {
+      "id": 5,
+      "name": "board-report-voice",
+      "prompt": "Làm giúp tôi deck 7 slide báo cáo HĐQT kết quả kinh doanh quý 3: doanh thu 46 tỷ trên kế hoạch 50 tỷ, lợi nhuận gộp 31% so với mục tiêu 34%, mở thêm 3 cửa hàng, tồn kho tăng 18%. Tôi cần HĐQT duyệt thêm 4 tỷ ngân sách marketing cho quý 4.",
+      "expected_output": "A 7-slide deck written as a report to a board: conclusion first, slide titles that state findings with numbers against plan, shortfalls stated plainly with cause and action, and a closing slide that asks for the 4 billion marketing budget. No teaching voice.",
+      "files": [],
+      "assertions": [
+        "The response states that it treats the deck as a report to the board (report upward), without asking the user to pick a deck type",
+        "The first content slide states the overall quarter result and that a decision is requested",
+        "Most slide titles are findings that include a number (e.g. revenue reached 92% of plan), not topic labels such as 'Doanh thu' or 'Tổng quan'",
+        "Each reported figure is shown against its plan or target (46 vs 50 tỷ, 31% vs 34%)",
+        "The shortfalls are stated plainly with a cause or an action, not softened or hidden",
+        "The deck closes with the request to approve 4 tỷ marketing budget for Q4, not a thank-you or lessons slide",
+        "No slide defines basic business concepts, asks the audience a rhetorical question, lists learning objectives, or gives the board advice or lessons",
+        "Slide text stays projection-legible and within the density limits (at most 5 bullets and a 5x4 table per slide)"
+      ]
     }
   ]
 }
