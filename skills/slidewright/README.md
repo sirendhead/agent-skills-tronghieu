@@ -33,7 +33,7 @@ Use SlideWright for talks, conference sessions, workshops, classes, demos, proje
 ## How a deck takes shape
 
 1. Share the talk outcome and the one message people should remember.
-2. Shape a concise narrative and visual direction around the audience and setting.
+2. The skill identifies the deck type (board report, decision request, pitch, training, talk, or internal update), then shapes the narrative, voice, and visual direction to fit that audience and setting.
 3. Build each slide around one idea, using large, room-readable type and visuals where they clarify the point.
 4. Add only presenter-controlled movement: navigation, a progressive reveal, or a comparison that supports the story.
 5. Check the deck for the target screen and prepare separate speaker notes; request a PDF when you need a shareable record.

@@ -75,25 +75,27 @@ EOF
 
 # --- Tailwind wiring spot #2: CSS entry + base styles ------------------------
 cat > src/index.css <<'EOF'
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 :root {
   --surface-inset: clamp(12px, 2.5vw, 48px);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body, #root { width: 100%; height: 100%; overflow: hidden; }
-body {
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  color: #1f2430;
-  background: #f8f3e7;
-  -webkit-font-smoothing: antialiased;
+/* Keep custom CSS inside a layer: unlayered rules override every Tailwind utility. */
+@layer base {
+  html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #1f2430;
+    background: #f8f3e7;
+    -webkit-font-smoothing: antialiased;
+  }
 }
-h1, h2, h3 { font-family: 'Outfit', system-ui, sans-serif; }
-button { font: inherit; }
-/* Apply to every content-bearing visible surface: card, panel, callout,
-   bordered box or text overlay. Outer Slide padding and grid gap are separate. */
-.slide-surface { padding: var(--surface-inset); }
+@layer components {
+  /* Apply to every content-bearing visible surface: card, panel, callout,
+     bordered box or text overlay. Outer Slide padding and grid gap are separate. */
+  .slide-surface { padding: var(--surface-inset); }
+}
 EOF
 
 cat > src/App.tsx <<'EOF'
@@ -237,7 +239,7 @@ export default function Deck() {
   const CurrentSlide = slides[current]
 
   return (
-    <div className="flex h-screen w-full flex-col bg-[#f8f3e7]">
+    <div className="flex h-screen w-full flex-col">
       <div className="relative flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div

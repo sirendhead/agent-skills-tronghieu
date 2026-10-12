@@ -48,7 +48,7 @@ cat > "$DECK_DIR/index.html" <<HTMLEOF
   <title>__TITLE__</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <style>
     :root {
       --accent:#9d6248; --ink:#1f2430; --bg:#f8f3e7; --soft:#6d6a66;
@@ -58,8 +58,7 @@ cat > "$DECK_DIR/index.html" <<HTMLEOF
     }
     * { box-sizing:border-box; margin:0; padding:0; }
     html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); }
-    body { font-family:'Plus Jakarta Sans', system-ui, sans-serif; color:var(--ink); }
-    h1,h2,h3 { font-family:'Outfit', system-ui, sans-serif; }
+    body { font-family:'Inter', system-ui, sans-serif; color:var(--ink); }
 
     /* Fluid layout. Slides fill the whole viewport at any aspect ratio — no fixed
        stage, so no letterbox/pillarbox bars on 16:10 laptops, ultrawides, or resized

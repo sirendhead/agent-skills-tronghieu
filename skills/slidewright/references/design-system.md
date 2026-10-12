@@ -87,6 +87,7 @@ template, use the same value in inline `style` or in `<style>` overrides.
 
 ## Content discipline
 
+- The deck type sets structure and voice. Decide it first — see `deck-types.md`.
 - One idea per slide. Few words. Let the presenter's voice carry the detail.
 - Prefer a real visual (image, diagram, screenshot) over a paragraph.
 - Vietnamese copy should sound like someone talking on stage — plain, honest, direct.
