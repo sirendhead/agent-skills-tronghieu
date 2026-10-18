@@ -35,15 +35,14 @@ def load(path: Path, max_rows=None) -> pd.DataFrame:
             return pd.read_csv(path, low_memory=False, nrows=max_rows)
         if suffix == ".tsv":
             return pd.read_csv(path, sep="\t", low_memory=False, nrows=max_rows)
-        if suffix == ".parquet":
-            df = pd.read_parquet(path)
+        if suffix in (".parquet", ".json"):
+            # No row limit at read time: --max-rows caps profiling, not parsing memory.
+            df = pd.read_parquet(path) if suffix == ".parquet" else pd.read_json(path)
             return df.head(max_rows) if max_rows else df
         if suffix in (".xlsx", ".xls"):
             return pd.read_excel(path, nrows=max_rows)
         if suffix == ".jsonl":
             return pd.read_json(path, lines=True, nrows=max_rows)
-        if suffix == ".json":
-            return pd.read_json(path)
     except ImportError as e:
         sys.exit(f"Missing engine for {suffix}: {e}. Install pyarrow (parquet) or openpyxl (xlsx).")
     sys.exit(f"Unsupported file type: {suffix}")
