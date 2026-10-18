@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/tronghieu/agent-skills?style=flat)](https://github.com/tronghieu/agent-skills)
 [![skills.sh](https://skills.sh/b/tronghieu/agent-skills)](https://www.skills.sh/tronghieu/agent-skills)
+[![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge.svg)](https://github.com/hesreallyhim/awesome-claude-code)
 
 Bộ sưu tập các skill có phương pháp dành cho người dùng AI để ra quyết định, vận hành dự án, phân tích bằng chứng, tạo tài liệu và hoàn thành công việc thực tế. Các skill này phù hợp với người dùng chủ động: bạn cung cấp bối cảnh thật và chịu trách nhiệm về quyết định; agent hỗ trợ cấu trúc, phân tích và kiểm tra chất lượng.
 

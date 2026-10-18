@@ -92,6 +92,16 @@ def test_profile(tmp, data):
           top["feature"] == "churn_score" and abs(top["r"]) > 0.95, f"got {top}")
 
 
+def test_profile_max_rows_json(tmp):
+    print("profile_data.py (--max-rows on .json):")
+    data = tmp / "rows.json"
+    data.write_text('[{"value": 1}, {"value": 2}, {"value": 3}]')
+    out = tmp / "json_rows"
+    run(PROFILE, data, "--max-rows", 1, "--out", out)
+    shape = json.loads((out / "data-profile.json").read_text())["shape"]
+    check("--max-rows caps ordinary JSON", shape == [1, 1], f"got {shape}")
+
+
 def test_baseline_classification(tmp, data, prevalence):
     print("baseline_model.py (classification):")
     out = tmp / "cls"
@@ -153,6 +163,7 @@ def main():
         data = tmp / "synth.csv"
         df = make_data(data)
         test_profile(tmp, data)
+        test_profile_max_rows_json(tmp)
         test_baseline_classification(tmp, data, prevalence=float(df["churn"].mean()))
         test_baseline_regression_time(tmp, data)
         test_regression_value_leak(tmp)
