@@ -171,6 +171,79 @@ class RunProbeAttentionTests(unittest.TestCase):
 
         self.assertTrue(self.probe.escalation_truncated(self.probe.ESCALATION_PREFIX + joined))
 
+    def hb(self, **kw) -> dict:
+        base = {"age_s": 5, "remaining_s": 9000, "stall_armed": False, "nudges": 0,
+                "transcript_idle_s": None}
+        base.update(kw)
+        return base
+
+    def find(self, cur: dict) -> list:
+        return self.probe.diagnose(cur, None, {"dirty_count": 0})
+
+    def test_stall_armed_on_a_dead_engine_is_not_reported(self):
+        cur = self.cur(self.probe.attention_state(str(self.run), []))
+        cur["pid"], cur["pid_alive"], cur["run_dir"] = "1", False, str(self.run)
+        cur["heartbeats"] = {"s-dev-1": self.hb(stall_armed=True, nudges=1)}
+
+        findings = self.find(cur)
+
+        self.assertFalse(any("stall_armed" in i or "stall nudge" in i for i in findings))
+
+    def test_stall_armed_on_a_live_session_is_reported(self):
+        cur = self.cur(self.probe.attention_state(str(self.run), []))
+        cur["run_dir"] = str(self.run)
+        cur["heartbeats"] = {"s-dev-1": self.hb(stall_armed=True)}
+
+        self.assertTrue(any("stall_armed" in i for i in self.find(cur)))
+
+    def test_fresh_transcript_softens_stall_armed(self):
+        cur = self.cur(self.probe.attention_state(str(self.run), []))
+        cur["run_dir"] = str(self.run)
+        cur["heartbeats"] = {"s-dev-1": self.hb(stall_armed=True, transcript_idle_s=3.0)}
+
+        hit = [i for i in self.find(cur) if "stall_armed" in i]
+
+        self.assertTrue(hit and "transcript changed 3s ago" in hit[0])
+
+    def test_alarms_on_terminal_stories_are_skipped(self):
+        cur = self.cur(
+            self.probe.attention_state(str(self.run), []),
+            tasks={"9-1": {"phase": "done", "attempt": 2, "review_cycle": 2}},
+        )
+        cur["limits"] = {"max_dev_attempts": 2, "max_review_cycles": 2}
+
+        findings = self.find(cur)
+
+        self.assertFalse(any("last chance" in i or "not converging" in i for i in findings))
+
+    def test_alarms_on_a_running_story_still_fire(self):
+        cur = self.cur(
+            self.probe.attention_state(str(self.run), []),
+            tasks={"9-1": {"phase": "dev-running", "attempt": 2, "review_cycle": 0}},
+        )
+        cur["limits"] = {"max_dev_attempts": 2, "max_review_cycles": 2}
+
+        self.assertTrue(any("last chance" in i for i in self.find(cur)))
+
+    def test_parked_pause_is_named_as_waiting_on_a_human(self):
+        flags = {"paused_reason": "parked: dev session stalled (PermissionPrompt; x)",
+                 "paused_stage": "escalation", "paused_story_key": "9-2"}
+        cur = self.cur(self.probe.attention_state(str(self.run), []), flags=flags)
+
+        hit = [i for i in self.find(cur) if "waiting on a human" in i]
+
+        self.assertTrue(hit and "resolve run-1 --no-interactive" in hit[0])
+
+    def test_environment_stage_pause_points_at_resume(self):
+        flags = {"paused_reason": "probe failed", "paused_stage": "environment",
+                 "paused_story_key": None}
+        cur = self.cur(self.probe.attention_state(str(self.run), []), flags=flags)
+
+        hit = [i for i in self.find(cur) if "environment fault" in i]
+
+        self.assertTrue(hit and "attempt is not charged" in hit[0])
+
+
     def test_stop_request_only_trusts_explicit_hard_mode(self):
         path = self.run / "stop-request.json"
         path.write_text(json.dumps({"mode": "hard", "requested_at": "now"}), encoding="utf-8")

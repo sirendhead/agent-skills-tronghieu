@@ -77,7 +77,14 @@ on a healthy in-flight run:
 
 **Run identity.** `run_id`, `run_type` (`story` or `sweep`), `started_at`, `current_epic`,
 `epic_filter`, `story_filter`, `max_stories`, `source`, `target_branch`, `sweep_cycle`,
-`sweeps_triggered`, `trusted_config_digest`, `project`, `spec_folder`, `plugin_shared`.
+`sweeps_triggered`, `trusted_config_digest`, `project`, `spec_folder`, `plugin_shared`, `repo_root`,
+`run_dir_identity`.
+
+`repo_root` is the git root where code work happens. It can differ from `project`, the BMAD
+project dir. `run_dir_identity` is a device and inode pair that guards the run dir against a swap.
+Resume and re-verify leave marks: `accept_baseline` and `adopt_pending` (one-resume latches),
+`reverify_from`, `reverify_replayed`, `replay_of`, `env_fault_cause`, `env_fault_site`,
+`escalations_resolved_upto`. `sweep_*` and `migration_*` fields track sweep and ledger state.
 
 `source` names which backlog mode fed the run. The project's policy chooses it. It is not a
 default the tool picks for you.
@@ -105,6 +112,8 @@ not `stories`. Watch the name collision: this map is keyed by story key, while t
 | `defer_reason` | Why a deferred story was deferred |
 | `worktree_path`, `branch` | Where isolated work lives, under `scm.isolation = "worktree"` |
 | `sentinel_kind` | Which pre-planning-halt sentinel the story hit, if any |
+| `generation` | Advances on re-arm. A replacement run of the same story gets fresh session ids, so one attempt number can own several task dirs |
+| `worktree_identity` | Device and inode of the kept worktree, recorded at mint time |
 | `tokens` | Cumulative token spend recorded against the story |
 | `token_budget_warned` | Once-per-run latch: the token-budget warning has already fired for this story, see `anomaly-triage.md` |
 | `preserve_ref` | **New in 0.10.0.** The branch a defer preserved the story's work on |
@@ -156,7 +165,12 @@ matter, not an inventory.
 | `plugin-hook` | `plugin, stage, rc[, blocking]` |
 | `story-start` | `story_key` |
 | `session-start` | `task_id, role, adapter, model, story_key, prompt` |
-| `session-end` | `task_id, status, tokens, tokens_weighted`, plus applicable extras: `fired_at, teardown_s, expired_clock` / `budget_weighted, budget, budget_mode` / `env_fault, env_fault_evidence` / `session_vanished`. Abort form: `task_id, status="aborted", error` |
+| `session-end` | `task_id, status, tokens, tokens_weighted`, plus applicable extras: `fired_at, teardown_s, expired_clock` / `budget_weighted, budget, budget_mode` / `env_fault, env_fault_evidence` / `session_vanished` / `parked, parked_evidence` / the last resultless-stop verdict. Abort form: `task_id, status="aborted", error` |
+| `session-idle`, `session-active` | `task_id, idle_s, since_ts, threshold_s`. A transcript-idle notice opens at `session-idle` and closes at the next `session-active`. The threshold is `dev_stall_grace_s` |
+| `retro-auto-start`, `retro-auto-finished`, `retro-run-end` | `[gates] retrospective = "auto"` runs a retro session (task id `epic-N-retrospective-retro-1`, role from `[adapter.retro]`) at an epic boundary and at run end. `retro-auto-finished` carries `epic, docs, verdict`. Failures: `retro-auto-failed`, `-dirty`, `-uncommitted`, `-skipped` |
+| `reverify-decision`, `story-reverify-armed`, `resume-reverify` | A `resolve --reverify` replay of kept work |
+| `env-fault-cleared`, `resume-env-dispatch` | Environment probes passed again on resume (`story_key, site`), and the paused story was re-dispatched (`story_key, role`) |
+| `board-advance-carry-failed` | The sprint-status writer refused a row; carries `refuse_cause` |
 | `dev-decision` | `story_key, attempt, session_status, action, reason, env_fault, session_vanished`. On an escalation the `reason` is truncated — see below |
 | `spec-deferrals-harvested` | `story_key, spec, dw_ids, deduped, malformed` |
 | `story-escalated` | `story_key, reason` — the same truncated text, see below |
@@ -214,14 +228,15 @@ offsets.
 
 ## tasks/&lt;task-id&gt;/
 
-task-id = story key + phase + attempt, for example `story-key-example-dev-1`. The log basename
+task-id = story key + phase + attempt, for example `story-key-example-dev-1`. After a re-arm the
+generation is appended: `story-key-example-dev-1-g2`. The log basename
 minus `.log` (`logs/<task-id>.log`) is exactly the task-id. That is how you join a log to its
 task dir.
 
 | File | Shape | Presence |
 |---|---|---|
 | `prompt.txt` | the launching prompt, raw text | always |
-| `heartbeat.json` | `{ts, remaining_s, stall_armed, stall_nudges_sent}`, overwritten every 30s while the session waits | once the wait loop survives one tick; absent for a near-instant session |
+| `heartbeat.json` | `{ts, remaining_s, stall_armed, stall_nudges_sent, ...}` (fields below), overwritten every 30s while the session waits | once the wait loop survives one tick; absent for a near-instant session |
 | `session-lifecycle.jsonl` | one JSON object per line, `{ts, event, ...}` | usually present once a session has been torn down — see below |
 | `resultless-stops.jsonl` | `{ts, verdict, detail}` per line | only on a Stop whose artifact read-back was empty |
 | `result.json` | skill-defined dict | written by the driven skill, not by bmad-loop, which only deletes it at session start and reads it back |
@@ -240,7 +255,7 @@ confirm the session is working on the story you think it is.
 
 ## tasks/&lt;task-id&gt;/heartbeat.json
 
-Written by the engine while a session runs. Four fields:
+Written by the engine while a session runs. Eight fields:
 
 | Field | Reading |
 |---|---|
@@ -248,6 +263,13 @@ Written by the engine while a session runs. Four fields:
 | `remaining_s` | Seconds left of `session_timeout_min`. Counts down from `session_timeout_min × 60` |
 | `stall_armed` | `true` once the session has been idle past `dev_stall_grace_s` |
 | `stall_nudges_sent` | How many wake-up nudges were sent; budget is `dev_stall_nudges` |
+| `stall_nudges_failed` | Nudges whose send raised |
+| `transcript_idle_s` | Seconds since the live transcript last changed. Null until a hook names the transcript. Small while `stall_armed` is true means the session is working, not hung |
+| `probe_failures` | Running streak of failed liveness probes |
+| `usage_sample_failures` | Running streak of failed budget usage reads |
+| `foreign_hook_events` | Hook events dropped as a nested CLI's |
+
+On a finished run the file keeps its last write. A leftover `stall_armed: true` there is not an alarm.
 
 ## tasks/&lt;task-id&gt;/session-lifecycle.jsonl
 
@@ -277,6 +299,12 @@ contract-refusal events: `frontmatter-unmodified-refused` and
 | `readback-refused-no-proof-of-work` | `fallback, spec, status[, dead_window]` |
 | `session-vanished` | `session, status` |
 | `env-fault-classified` | `status, evidence` |
+| `parked-signal` | the prompt evidence that parked the session |
+| `stall-nudge-withheld` | the wake nudge was skipped because the CLI waits on a human |
+| `foreign-hook-event-ignored` | a nested CLI session's hook event was dropped, once per id |
+| `pinned-session-id-mismatch` | a hook event named a session id the launch did not pin |
+| `liveness-probe-failed`, `liveness-probe-recovered` | the multiplexer liveness probe failed, then recovered |
+| `usage-sample-failed`, `usage-sample-recovered` | the budget usage read failed, then recovered |
 
 `kill-outcome` specifically means that session was reaped and its log will never grow
 again.

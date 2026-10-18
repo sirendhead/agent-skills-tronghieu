@@ -166,6 +166,8 @@ So treat a frozen counter as a prompt to look closer, never as a verdict.
 | frozen | yes | no, the same frame repeating | genuinely stuck |
 | frozen | no | no | hung, confirm with the heartbeat |
 
+Check `transcript_idle_s` in `heartbeat.json` as well. A value of a few seconds means the live transcript is still changing, so the session is working even if the pane is quiet.
+
 Read the `prose` and `results` tails before you call a stall. Subagent activity shows up there
 as named lines such as `Edge case hunter review · 3 tool uses · 80.3k tokens`, even while the
 parent footer sits still.

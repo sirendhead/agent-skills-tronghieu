@@ -32,6 +32,9 @@ import subprocess
 import sys
 import time
 
+# Phases where a story is settled; attempt and review counters there are history.
+SETTLED_PHASES = ("done", "deferred", "escalated", "awaiting-operator")
+
 FAILURE_KINDS = ("error", "crash", "escalat", "stall", "fail", "env_fault", "pause", "budget")
 
 # The engine rewrites heartbeat.json roughly this often while a session is alive.
@@ -89,7 +92,7 @@ def pid_alive(pid: str) -> bool:
 def stop_request(run: str) -> dict | None:
     """Read the pending stop-control file without treating malformed bytes as hard.
 
-    bmad-loop 0.11.1 reads a present legacy, malformed, or temporarily unreadable
+    bmad-loop 0.13.2 reads a present legacy, malformed, or temporarily unreadable
     body as graceful; only an explicit ``mode: hard`` is hard. Mirror that
     conservative contract here.
     """
@@ -247,6 +250,8 @@ def collect(project: str, run: str) -> dict:
             "remaining_s": round(h.get("remaining_s", 0)),
             "stall_armed": h.get("stall_armed"),
             "nudges": h.get("stall_nudges_sent"),
+            # Seconds since the transcript last changed; null until a hook names it.
+            "transcript_idle_s": h.get("transcript_idle_s"),
         }
 
     logs = {os.path.basename(p): os.path.getsize(p)
@@ -350,6 +355,13 @@ def diagnose(cur: dict, prev: dict | None, git: dict) -> list[str]:
         out.append(f"T1 paused at {f.get('paused_stage')} on {f.get('paused_story_key')}: "
                    f"{reason} -> `bmad-loop resolve {cur['run_id']}` or "
                    f"`bmad-loop resume {cur['run_id']}`")
+        if reason.startswith("parked:"):
+            out.append("T1 the CLI is waiting on a human prompt (permission, idle or quota), not "
+                       "hung; the stall nudge was withheld and no attempt was charged. Clear the "
+                       f"cause, then `bmad-loop resolve {cur['run_id']} --no-interactive`")
+        elif f.get("paused_stage") == "environment":
+            out.append("T1 environment fault, not a code failure; the attempt is not charged. "
+                       f"Fix the environment, then `bmad-loop resume {cur['run_id']}` (re-probes)")
     hit = truncated_escalation(cur)
     if hit:
         story, found_in = hit
@@ -397,23 +409,25 @@ def diagnose(cur: dict, prev: dict | None, git: dict) -> list[str]:
     max_att = lim.get("max_dev_attempts") or 2
     max_rev = lim.get("max_review_cycles") or 3
     for k, t in cur["tasks"].items():
+        if t.get("phase") in SETTLED_PHASES:
+            if t.get("phase") == "escalated" and not (f.get("paused_reason") or f.get("paused_stage")):
+                out.append(f"T3 {k}: phase escalated while the run is not paused — resumed past the "
+                           "escalation without re-arming it; nothing will re-drive this story")
+            continue
         if (t.get("attempt") or 0) >= max_att:
             out.append(f"T2 {k}: attempt {t['attempt']}/{max_att} — last chance before the story fails")
         if (t.get("review_cycle") or 0) >= max_rev - 1:
             out.append(f"T2 {k}: review_cycle {t['review_cycle']}/{max_rev} — review is not converging")
         if (t.get("followup_reviews_spent") or 0) > 0:
             out.append(f"T2 {k}: followup review spent ({t['followup_reviews_spent']})")
-        # `resume` clears the pause without re-arming; `resolve` re-arms. So an
-        # escalated phase outstanding on an unpaused run means someone resumed
-        # past it, and nothing left in the run will pick the story back up.
-        if t.get("phase") == "escalated" and not (f.get("paused_reason") or f.get("paused_stage")):
-            out.append(f"T3 {k}: phase escalated while the run is not paused — resumed past the "
-                       "escalation without re-arming it; nothing will re-drive this story")
 
     for k, h in cur["heartbeats"].items():
-        if h.get("stall_armed"):
-            out.append(f"T2 {k}: stall_armed — the session went idle past its grace window")
-        if (h.get("nudges") or 0) > 0:
+        if h.get("stall_armed") and active.get(k, True):
+            idle = h.get("transcript_idle_s")
+            seen = (f" but the transcript changed {idle:.0f}s ago — likely working, e.g. on subagents"
+                    if idle is not None and idle < (lim.get("dev_stall_grace_s") or 600) else "")
+            out.append(f"T2 {k}: stall_armed — the pane went idle past its grace window{seen}")
+        if (h.get("nudges") or 0) > 0 and active.get(k, True):
             out.append(f"T2 {k}: {h['nudges']} stall nudge(s) sent")
         if active.get(k, True) and h.get("age_s", 0) > STALE_S:
             out.append(f"T2 {k}: heartbeat {h['age_s']}s old — engine may not be writing")

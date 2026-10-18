@@ -15,6 +15,9 @@ on any of them, read the actual value from your own run's `policy_snapshot`.
 | Engine died silently | `engine.pid` not alive while `finished` and `stopped` are both false | Nothing will resume it. Choose between `bmad-loop resume <run-id>` and a fresh run. Check the working tree first if `scm.isolation = "none"` |
 | Attention raised | A new or unresolved notice in `ATTENTION`. File existence alone is not enough | Read the whole file, then corroborate the newest notice as described below. Governed by `notify.file` |
 | Run concluded | `finished: true` or `stopped: true` | Not a fault. It is the moment a summary is owed: stories completed, backlog remaining, working-tree state |
+| Parked session | `paused_reason` starts `parked:`; `session-end` carries `parked` and `parked_evidence`; lifecycle `parked-signal`, `stall-nudge-withheld` | The CLI sat on a permission, idle or quota prompt. The engine withheld the wake nudge so it could not answer the prompt. No attempt is charged and the story is `escalated`. Clear the cause, then `bmad-loop resolve <run-id> --no-interactive` (re-arm and resume; plain `resume` skips an escalated story). Not a hang, not an agent failure |
+| Environment-fault pause | `paused_stage = "environment"`, or `paused_reason` starts `no work produced:` or names an environment fault | A failing `[environment] probes` check, a verify exit equal to `[verify] env_fault_rc`, or a session reporting `Environment fault:`. No attempt is charged. Fix the environment, then `bmad-loop resume <run-id>` (re-probes and relaunches). For an escalated or deferred story: `bmad-loop resolve <run-id> --reverify` |
+| Sprint-status write refused | `board-advance-carry-failed` with `refuse_cause`, or an escalation naming board and row; `bmad-loop confirm` exits 1 | A sprint-status row has a shape the writer cannot rewrite (flow mapping, anchored value, ambiguous key). Work is kept and nothing retries. Repair the row by hand, then repeat the command |
 | Story parked for an operator | `tasks.<k>.phase = "awaiting-operator"` | `bmad-loop confirm <story-key>` (`--list`, `--json`, `--yes`, `--reverify`) |
 
 A gate can also hold a run. `gates.mode = "per-epic"` pauses at each epic boundary for
@@ -135,7 +138,7 @@ Waiting for the run to advance the story is a mistake. Only a human running `bma
 | Last dev attempt | `tasks.<k>.attempt >= limits.max_dev_attempts` | The next failure ends the story. With `max_dev_attempts = 2`, seeing `2` means one chance left |
 | Review not converging | `tasks.<k>.review_cycle` approaching `limits.max_review_cycles` | Repeated review rounds mean the agent cannot satisfy the findings, not that it is being careful |
 | Follow-up review spent | `followup_reviews_spent > 0` | Budget from `max_followup_reviews` is being consumed |
-| Session went idle | `heartbeat.stall_armed: true`, or `stall_nudges_sent > 0` | The session ended a turn without a result and sat past `dev_stall_grace_s`. Nudges are capped by `dev_stall_nudges` |
+| Session went idle | `heartbeat.stall_armed: true`, or `stall_nudges_sent > 0` | The pane sat past `dev_stall_grace_s`. Nudges are capped by `dev_stall_nudges`. Read `transcript_idle_s` too: a small value means the transcript is still changing, as when the session delegates to subagents, so it is working. Only a large value beside a frozen log is a hang. On a dead or finished run the last heartbeat is a leftover, so ignore it. An idle claude session now pauses as a parked session instead of being nudged |
 | Heartbeat stale | `age_s` beyond ~2× the write interval | The engine may have stopped writing even though the pid lives |
 | Budget nearly gone | `remaining_s < 600` while phase is still `dev-*` | `session_timeout_min` is about to end the session mid-implementation, before verify and review have run at all |
 | Session budget warned | `session-lifecycle.jsonl` has `budget-tripped` (`weighted, budget, mode`), plus an ATTENTION notice | `session_budget_mode = "warn"`, the default, tripped `max_tokens_per_session`. The session keeps running to its natural end. A degradation signal with no consequence yet |
@@ -149,6 +152,8 @@ the shell's "found but not executable" and "not found" convention. Windows adds 
 signature-based arm. Every other verify breakage is recorded as an ordinary failure and
 consumes a dev attempt: a stopped database, an unreachable port, a missing service. So when a
 story fails on the first attempt, check the environment before you blame the agent.
+
+A third source is `[environment] probes`. They run before `[verify]` and before each session launch. A failing probe pauses the run without charging an attempt. `validate --probes` runs them on demand.
 
 `session-end.env_fault` comes from a different mechanism. After any non-completed session,
 bmad-loop regex-scans the last 64 KiB of that session's log against the adapter profile's
@@ -168,6 +173,7 @@ artifacts across time. That is why a probe writes a snapshot.
 | Tool-call loop | The last several `tools` entries are near-identical to the previous probe's | The agent is retrying the same thing rather than advancing |
 | Runaway output | Log grew by more than a few MB in one interval | Usually a command dumping enormous output, or a loop |
 | Story re-driven | Multiple `story-start` entries for one `story_key` in the journal | Work restarted from the beginning |
+| Refused board row | Backlog count unchanged although a story reached `done`, and `board-advance-carry-failed` in the journal | The sprint-status writer refused the row. See "Sprint-status write refused" above |
 | Silent verify failure | Backlog count unchanged although a story reached `done` | A verify command ending in `\|\| true` failed without failing the run. Check `policy_snapshot.verify.commands` for which steps this project made non-fatal |
 | Session budget guard disabled | No `budget-tripped` or `over-budget-fired` ever appears, despite a heavy-spend session | The adapter has no mid-session usage signal to sample, so `session_budget_mode` (`warn` or `enforce`) is inert regardless of setting. Absence of the event is not evidence the session stayed under budget |
 | Story resumed past, not resolved | `tasks.<k>.phase = "escalated"` while `paused_reason` is null | A plain `bmad-loop resume` clears the pause without re-arming the story. The phase is terminal, so nothing re-drives it. See "Reading an escalation" |
@@ -224,7 +230,7 @@ Give one command, not a menu. The useful ones:
 | Need to stop everything | `bmad-loop stop <run-id>` |
 | Handing a fault to maintainers | `bmad-loop diagnose`. Produces a sanitized dump |
 | Ledger has grown untriaged | `bmad-loop sweep` |
-| Story failed and the environment is suspect | `bmad-loop validate`. Reports host facts no run directory contains: multiplexer availability and version, whether the coding CLI's binary is on PATH, hook registration and staleness, git worktree cleanliness |
+| Story failed and the environment is suspect | `bmad-loop validate` (`--probes` runs the project probes). Reports host facts no run directory contains: multiplexer availability and version, whether the coding CLI's binary is on PATH, hook registration and staleness, git worktree cleanliness |
 
 When advising on a dirty working tree under `isolation = "none"`, do not propose a blanket
 clean. The run's own recovery is deliberately conservative. Untracked files in the tree may
@@ -239,6 +245,9 @@ of the surface reads as read-only and is not.
 | Command | What it actually does |
 |---|---|
 | `mux set <name>` | Writes `policy.toml`. Bare `mux` (no subcommand) only reports the selected backend and is safe |
+| `validate --probes`, `validate --render-probe` | Run operator probe shell, or each dev skill's render command (needs network). Plain `validate` does not execute either |
+| `resolve <run-id>` | Changes the run. `--reverify` re-runs verify and commits. `--adopt-branch` finishes a story from its kept branch without review or verify. `--no-interactive` re-arms and resumes |
+| `resume <run-id> --accept-baseline` | Latches a one-resume baseline accept |
 | `confirm <story-key>` | Completes the parked story by default. Only `confirm --list` observes |
 | `decisions` | Answers a pending decision by default. Only `decisions --list` observes |
 | `attach` | Joins a live session. Any keystroke sent to it acts, including an accidental one |
